@@ -149,6 +149,7 @@ async function fetchCoursesViaAjax(sessionId) {
 
     return (responseData.data?.courses || []).map(course => ({
         id: course.id,
+        startdate: course.startdate,
         fullname: course.fullname,
         shortname: course.shortname,
         summary: course.summary,
