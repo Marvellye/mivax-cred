@@ -1,4 +1,5 @@
 const express = require('express');
+const cors = require('cors');
 const { chromium } = require('playwright');
 const axios = require('axios');
 const cheerio = require('cheerio');
@@ -7,6 +8,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
 const SESSIONS_DIR = path.join(__dirname, 'sessions');
