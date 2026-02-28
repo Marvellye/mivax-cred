@@ -61,7 +61,14 @@ async function getCourseDetails(page) {
 
     const progressText = document.querySelector('div.progressbar-text-wrapper span')?.textContent?.trim();
 
-    // 2. Extract Sections and Modules
+    // 3. Extract Course Description
+    const descriptionEl = document.querySelector('div.coursesummary');
+    const description = descriptionEl ? Array.from(descriptionEl.querySelectorAll('p'))
+      .map(p => p.textContent.trim())
+      .filter(text => text.length > 0)
+      .join('\n\n') : null;
+
+    // 4. Extract Sections and Modules
     const sections = [];
     
     // Look for both the sidebar index and the main content area sections
@@ -121,6 +128,7 @@ async function getCourseDetails(page) {
       title,
       category,
       backgroundImage,
+      description,
       instructors,
       progress: progressText,
       sections: sections.filter(s => s.modules.length > 0) // Only return sections with content
