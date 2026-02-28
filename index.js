@@ -70,6 +70,27 @@ function parseCourses(html) {
     return courses;
 }
 
+// --- Custom Errors ---
+class SessionExpiredError extends Error {
+    constructor(message = 'Session expired') {
+        super(message);
+        this.name = 'SessionExpiredError';
+        this.status = 401;
+    }
+}
+
+// --- Helper: Handle Route Errors ---
+function handleRouteError(err, sessionId, res) {
+    if (err instanceof SessionExpiredError) {
+        const sessionPath = path.join(SESSIONS_DIR, `${sessionId}.json`);
+        if (fs.existsSync(sessionPath)) {
+            fs.unlinkSync(sessionPath);
+        }
+        return res.status(401).json({ error: 'Session expired' });
+    }
+    res.status(500).json({ error: err.message });
+}
+
 // --- Helper: AJAX Course Fetcher ---
 
 async function fetchCoursesViaAjax(sessionId) {
@@ -77,9 +98,20 @@ async function fetchCoursesViaAjax(sessionId) {
     if (!auth) throw new Error('Session not found');
 
     // 1. Fetch page to get sesskey
-    const { data: html } = await axios.get('https://lms.miva.university/my/courses.php', auth);
+    const response = await axios.get('https://lms.miva.university/my/courses.php', {
+        ...auth,
+        maxRedirects: 5,
+        validateStatus: (status) => status < 400
+    });
+
+    // If redirected to login
+    if (response.request.path.includes('login/index.php')) {
+        throw new SessionExpiredError();
+    }
+
+    const html = response.data;
     const sesskeyMatch = html.match(/"sesskey":"([^"]+)"/);
-    if (!sesskeyMatch) throw new Error('Could not find sesskey');
+    if (!sesskeyMatch) throw new SessionExpiredError('Could not find sesskey');
     const sesskey = sesskeyMatch[1];
 
     // 2. Call AJAX service
@@ -99,7 +131,12 @@ async function fetchCoursesViaAjax(sessionId) {
 
     const { data: ajaxResponse } = await axios.post(ajaxUrl, payload, auth);
     const responseData = ajaxResponse[0];
-    if (responseData.error) throw new Error(responseData.exception?.message || 'Moodle AJAX error');
+    if (responseData.error) {
+        if (responseData.exception?.errorcode === 'invalidsesskey') {
+            throw new SessionExpiredError();
+        }
+        throw new Error(responseData.exception?.message || 'Moodle AJAX error');
+    }
 
     return (responseData.data?.courses || []).map(course => ({
         id: course.id,
@@ -244,33 +281,51 @@ app.get('/courses/:sessionId', async (req, res) => {
         const courses = await fetchCoursesViaAjax(req.params.sessionId);
         res.json({ courses });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        handleRouteError(err, req.params.sessionId, res);
     }
 });
 
 // 3. LIGHT COURSE DETAILS (Axios/Cheerio)
 app.get('/course/:id/:sessionId', async (req, res) => {
-    const auth = getAuthHeaders(req.params.sessionId);
+    const sessionId = req.params.sessionId;
+    const auth = getAuthHeaders(sessionId);
     if (!auth) return res.status(404).json({ error: 'Session not found' });
     try {
-        const { data } = await axios.get(`https://lms.miva.university/course/view.php?id=${req.params.id}`, auth);
-        const courseData = parseCourseDetails(data);
+        const response = await axios.get(`https://lms.miva.university/course/view.php?id=${req.params.id}`, {
+            ...auth,
+            maxRedirects: 5
+        });
+
+        if (response.request.path.includes('login/index.php')) {
+            throw new SessionExpiredError();
+        }
+
+        const courseData = parseCourseDetails(response.data);
         res.json({ id: req.params.id, ...courseData });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        handleRouteError(err, sessionId, res);
     }
 });
 
 // 4. LIGHT MODULE DETAILS (Axios/Cheerio)
 app.get('/mod/:type/:id/:sessionId', async (req, res) => {
-    const auth = getAuthHeaders(req.params.sessionId);
+    const sessionId = req.params.sessionId;
+    const auth = getAuthHeaders(sessionId);
     if (!auth) return res.status(404).json({ error: 'Session not found' });
     try {
-        const { data } = await axios.get(`https://lms.miva.university/mod/${req.params.type}/view.php?id=${req.params.id}`, auth);
-        const modData = parseModuleDetails(data, req.params.type);
+        const response = await axios.get(`https://lms.miva.university/mod/${req.params.type}/view.php?id=${req.params.id}`, {
+            ...auth,
+            maxRedirects: 5
+        });
+
+        if (response.request.path.includes('login/index.php')) {
+            throw new SessionExpiredError();
+        }
+
+        const modData = parseModuleDetails(response.data, req.params.type);
         res.json({ id: req.params.id, ...modData });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        handleRouteError(err, sessionId, res);
     }
 });
 
