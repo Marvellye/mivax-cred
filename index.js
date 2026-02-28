@@ -18,7 +18,11 @@ let browser;
 (async () => {
     browser = await chromium.launch({
         headless: true,
-        args: ['--disable-dev-shm-usage']
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage'
+        ]   
     });
 })();
 
@@ -227,9 +231,7 @@ app.post('/login', async (req, res) => {
         await context.storageState({ path: sessionPath });
         await context.close();
 
-        // After successful login, use the lightning method to fetch the courses
-        const courses = await fetchCoursesViaAjax(sessionId);
-        res.json({ sessionId, courses });
+        res.json({ sessionId });
 
     } catch (error) {
         res.status(500).json({ error: error.message });
