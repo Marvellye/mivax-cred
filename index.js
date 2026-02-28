@@ -39,6 +39,95 @@ async function getCourses(page) {
   });
 }
 
+// Helper to extract specific course detail data
+async function getCourseDetails(page) {
+  // Give the page a moment to hydrate dynamic components
+  await page.waitForTimeout(1500);
+
+  return await page.evaluate(() => {
+    // 1. Extract Header Info
+    const header = document.querySelector('header#page-header');
+    const title = header?.querySelector('h1.header-heading')?.textContent?.trim();
+    const category = header?.querySelector('div.category span.badge')?.textContent?.trim();
+    
+    const bgStyle = header?.getAttribute('style') || '';
+    const bgMatch = bgStyle.match(/url\(["']?(.*?)["']?\)/);
+    const backgroundImage = bgMatch ? bgMatch[1] : null;
+
+    // Use Set to remove potential duplicates in instructors
+    const instructorsFull = Array.from(document.querySelectorAll('div.instructor-info span.titles'))
+      .map(el => el.textContent.trim());
+    const instructors = [...new Set(instructorsFull)];
+
+    const progressText = document.querySelector('div.progressbar-text-wrapper span')?.textContent?.trim();
+
+    // 2. Extract Sections and Modules
+    const sections = [];
+    
+    // Look for both the sidebar index and the main content area sections
+    // Priority to courseindex-section as it usually has the full structure
+    const sectionElements = document.querySelectorAll('div.courseindex-section, li.section.main');
+
+    sectionElements.forEach((sectionEl, index) => {
+      // Find title - handles both index and main content layouts
+      const sectionTitleLink = sectionEl.querySelector('a[data-for="section_title"], h3.sectionname a, h3.section-title, .courseindex-link');
+      const sectionName = sectionTitleLink?.textContent?.trim();
+      
+      // Fallback for ID: data-id -> data-sectionid -> data-number -> incremental index
+      const sectionId = sectionEl.getAttribute('data-id') || 
+                        sectionEl.getAttribute('data-sectionid') || 
+                        sectionEl.getAttribute('data-number') || 
+                        `sec-${index}`;
+
+      const modules = [];
+      // Look for modules in the course index list or the main activity list
+      const moduleElements = sectionEl.querySelectorAll('li.courseindex-item[data-for="cm"], li.activity');
+
+      moduleElements.forEach(modEl => {
+        // Find module link and name - flexible selector for different layouts
+        const modLink = modEl.querySelector('a.courseindex-link, a.aalink, a');
+        const nameEl = modEl.querySelector('span.instancename, span.courseindex-name, .text-truncate');
+        const modName = nameEl?.textContent?.trim() || modLink?.textContent?.trim();
+        const modUrl = modLink?.href?.trim();
+        const modId = modEl.getAttribute('data-id') || modEl.id?.replace('module-', '');
+        
+        // Completion status
+        const completionImg = modEl.querySelector('span[data-for="cm_completion"] img, div.completioninfo img, img.completionicon');
+        const isCompleted = completionImg?.src?.includes('completion_complete') || completionImg?.title?.includes('Done');
+        
+        if (modName && modUrl && modUrl !== '#' && !modUrl.includes('togglecourseindexsection')) {
+          modules.push({ 
+            id: modId, 
+            name: modName.replace(/ To do$/ , '').replace(/ Done$/ , '').trim(), 
+            url: modUrl, 
+            isCompleted: !!isCompleted 
+          });
+        }
+      });
+
+      // Avoid adding duplicate sections and skip those with no name/modules
+      const isDuplicate = sections.some(s => s.id === sectionId || (s.name === sectionName && s.modules.length === modules.length));
+      
+      if (sectionName && !isDuplicate) {
+        sections.push({ 
+          id: sectionId, 
+          name: sectionName, 
+          modules 
+        });
+      }
+    });
+
+    return {
+      title,
+      category,
+      backgroundImage,
+      instructors,
+      progress: progressText,
+      sections: sections.filter(s => s.modules.length > 0) // Only return sections with content
+    };
+  });
+}
+
 
 const app = express();
 app.use(express.json());
@@ -152,6 +241,52 @@ app.get('/courses/:sessionId', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+app.get('/course/:id/:sessionId', async (req, res) => {
+  const { id, sessionId } = req.params;
+  const sessionPath = path.join(SESSIONS_DIR, `${sessionId}.json`);
+
+  if (!fs.existsSync(sessionPath)) {
+    return res.status(404).json({ error: 'Session not found or expired' });
+  }
+
+  try {
+    const context = await browser.newContext({ storageState: sessionPath });
+    const page = await context.newPage();
+
+    await page.route('**/*', route => {
+      const type = route.request().resourceType();
+      if (['image', 'font', 'stylesheet', 'media'].includes(type) && !route.request().url().includes('miva')) {
+        route.abort();
+      } else {
+        route.continue();
+      }
+    });
+
+    // Go to specific course page
+    const courseUrl = `https://lms.miva.university/course/view.php?id=${id}`;
+    await page.goto(courseUrl, { waitUntil: 'domcontentloaded' });
+
+    // Check if session is still valid
+    if (page.url().includes('login/index.php') || page.url().includes('cas/login')) {
+      await context.close();
+      return res.status(401).json({ error: 'Session expired. Please login again.' });
+    }
+
+    // Wait for the course header or content to appear
+    await page.waitForSelector('header#page-header, div.courseindex-section', { timeout: 30000 });
+
+    const courseData = await getCourseDetails(page);
+    
+    await context.close();
+    res.json({ id, ...courseData });
+
+  } catch (error) {
+    console.error(`Failed to get course ${id}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 
 app.listen(3000, () => console.log('Server running'));
