@@ -49,9 +49,16 @@ function getAuthHeaders(sessionId) {
     };
 }
 
+// --- Helper: Image Proxy URL ---
+const BASE_URL = 'https://mivax-cred.onrender.com';
+function proxyImg(url, sessionId) {
+    if (!url) return null;
+    return `${BASE_URL}/img/${Buffer.from(url).toString('base64')}/${sessionId}`;
+}
+
 // --- Helper: Course Parser (for legacy fallback if needed) ---
 
-function parseCourses(html) {
+function parseCourses(html, sessionId) {
     const $ = cheerio.load(html);
     const courses = [];
     $('div[data-course-id][data-region="course-content"]').each((i, el) => {
@@ -64,7 +71,7 @@ function parseCourses(html) {
         let image = null;
         const bg = imgDiv.attr('style') || '';
         const match = bg.match(/url\(["']?(.*?)["']?\)/);
-        if (match) image = match[1];
+        if (match) image = proxyImg(match[1], sessionId);
         if (id && name && url) {
             courses.push({ id, name, url, image });
         }
@@ -147,19 +154,19 @@ async function fetchCoursesViaAjax(sessionId) {
         summary: course.summary,
         activitydata: course.activitydata,
         viewurl: course.viewurl,
-        courseimage: course.courseimage
+        courseimage: proxyImg(course.courseimage, sessionId)
     }));
 }
 
 // --- Helper: Content Parsers ---
 
-function parseCourseDetails(html) {
+function parseCourseDetails(html, sessionId) {
     const $ = cheerio.load(html);
     const title = $('header#page-header h1.header-heading').text().trim();
     const category = $('header#page-header div.category span.badge').text().trim();
     const bgStyle = $('header#page-header').attr('style') || '';
     const bgMatch = bgStyle.match(/url\(["']?(.*?)["']?\)/);
-    const backgroundImage = bgMatch ? bgMatch[1] : null;
+    const backgroundImage = bgMatch ? proxyImg(bgMatch[1], sessionId) : null;
     const instructors = [...new Set($('div.instructor-info span.titles').map((i, el) => $(el).text().trim()).get())];
     const progress = $('div.progressbar-text-wrapper span').first().text().trim();
     const description = $('div.coursesummary p').map((i, el) => $(el).text().trim()).get().filter(t => t.length > 0).join('\n\n');
@@ -232,6 +239,45 @@ function parseModuleDetails(html, type) {
 }
 
 // --- MAIN ROUTES ---
+app.get('/', (req, res) => {
+    res.send('Miva LMS Scraper API is running!');
+});
+
+// IMAGE PROXY — fetches any CORS-blocked image server-side and streams it back
+// Usage: /img/<base64-encoded image URL>/<sessionId>
+app.get('/img/:base64url/:sessionId', async (req, res) => {
+    let imageUrl;
+    try {
+        imageUrl = Buffer.from(req.params.base64url, 'base64').toString('utf8');
+        if (!imageUrl.startsWith('http')) {
+            return res.status(400).json({ error: 'Invalid image URL' });
+        }
+    } catch {
+        return res.status(400).json({ error: 'Failed to decode URL' });
+    }
+
+    const auth = getAuthHeaders(req.params.sessionId);
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://lms.miva.university/',
+        ...(auth ? auth.headers : {})
+    };
+
+    try {
+        const response = await axios.get(imageUrl, {
+            responseType: 'stream',
+            headers,
+            timeout: 15000
+        });
+
+        const contentType = response.headers['content-type'] || 'image/jpeg';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=86400'); // cache for 1 day
+        response.data.pipe(res);
+    } catch (err) {
+        res.status(502).json({ error: 'Failed to fetch image', details: err.message });
+    }
+});
 
 // 1. HEAVY LOGIN (Playwright)
 app.post('/login', async (req, res) => {
@@ -302,7 +348,7 @@ app.get('/course/:id/:sessionId', async (req, res) => {
             throw new SessionExpiredError();
         }
 
-        const courseData = parseCourseDetails(response.data);
+        const courseData = parseCourseDetails(response.data, sessionId);
         res.json({ id: req.params.id, ...courseData });
     } catch (err) {
         handleRouteError(err, sessionId, res);
