@@ -102,11 +102,21 @@ async function getCourseDetails(page) {
         const completionImg = modEl.querySelector('span[data-for="cm_completion"] img, div.completioninfo img, img.completionicon');
         const isCompleted = completionImg?.src?.includes('completion_complete') || completionImg?.title?.includes('Done');
         
+        // Determine module type from URL
+        let type = 'unknown';
+        if (modUrl.includes('/mod/page/')) type = 'page';
+        else if (modUrl.includes('/mod/quiz/')) type = 'quiz';
+        else if (modUrl.includes('/mod/url/')) type = 'url';
+        else if (modUrl.includes('/mod/forum/')) type = 'forum';
+        else if (modUrl.includes('/mod/assign/')) type = 'assignment';
+        else if (modUrl.includes('/mod/feedback/')) type = 'feedback';
+
         if (modName && modUrl && modUrl !== '#' && !modUrl.includes('togglecourseindexsection')) {
           modules.push({ 
             id: modId, 
-            name: modName.replace(/ To do$/ , '').replace(/ Done$/ , '').trim(), 
-            url: modUrl, 
+            type: type,
+            name: modName.replace(/ (To do|Done|Quiz|Page|URL|Forum|Feedback|Assignment)$/i, '').trim(), 
+            url: modUrl,
             isCompleted: !!isCompleted 
           });
         }
