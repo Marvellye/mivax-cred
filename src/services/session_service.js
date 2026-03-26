@@ -29,7 +29,45 @@ function getAuthHeaders(sessionId) {
   };
 }
 
+function getSISAuthHeaders(sessionId) {
+  const sessionPath = path.join(SESSIONS_DIR, `${sessionId}.json`);
+  if (!fs.existsSync(sessionPath)) return null;
+
+  const storage = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
+
+  // Fallback to empty origins if not available
+  const origins = storage.origins || [];
+  const sisOrigin = origins.find(o => o.origin === 'https://sis.miva.university') || {};
+  const localStorage = sisOrigin.localStorage || [];
+  
+  const authStorage = localStorage.find(item => item.name === 'auth-storage');
+  if (!authStorage) {
+      // Sometimes it might be under the main origin login
+      // But based on the user request, it's explicitly in sis.miva.university
+      return null;
+  }
+
+  try {
+    const authData = JSON.parse(authStorage.value);
+    const token = authData.state?.access_token;
+
+    if (!token) return null;
+
+    return {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'x-origin-portal': 'student',
+        'dnt': '1'
+      }
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
 module.exports = {
   SessionExpiredError,
-  getAuthHeaders
+  getAuthHeaders,
+  getSISAuthHeaders
 };

@@ -1,9 +1,9 @@
 const crawlerService = require('../services/crawler_service');
 
 const login = async (req, res) => {
-  const { username, password } = req.body;
+  const { email, password } = req.body;
   try {
-    const sessionId = await crawlerService.login(username, password);
+    const sessionId = await crawlerService.login(email, password);
     res.json({ sessionId });
   } catch (error) {
     res.status(500).json({ error: error.message });
