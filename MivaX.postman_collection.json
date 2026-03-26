@@ -79,6 +79,20 @@
           "response": []
         },
         {
+          "name": "Full Transcript (All Levels)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/student/transcript/{{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["student", "transcript", "{{sessionId}}"]
+            },
+            "description": "Returns results for all academic levels at once."
+          },
+          "response": []
+        },
+        {
           "name": "Transcript (Level Specific)",
           "request": {
             "method": "GET",

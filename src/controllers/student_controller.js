@@ -176,6 +176,34 @@ const getTranscript = async (req, res) => {
   }
 };
 
+const getFullTranscript = async (req, res) => {
+  const { sessionId } = req.params;
+  try {
+    const data = await _getRawDashboardData(sessionId);
+    const levels = (data.programme_level_enrollment || []).map(levelData => ({
+      level: levelData.level,
+      total_grade_point: levelData.total_grade_point,
+      semesters: (levelData.semesters || []).map(s => ({
+        name: s.semester_name,
+        type: s.semester_type,
+        gpa: s.gpa,
+        courses: (s.courses || []).map(c => ({
+          code: c.course_code,
+          name: c.course_name,
+          unit: c.credit_unit,
+          score: c.score,
+          symbol: c.symbol,
+          result: c.result,
+          status: c.status
+        }))
+      }))
+    }));
+    res.json({ levels });
+  } catch (err) {
+    handleRouteError(err, sessionId, res);
+  }
+};
+
 const getCurrentCourses = async (req, res) => {
     const { sessionId } = req.params;
     try {
@@ -225,6 +253,7 @@ module.exports = {
   getAcademicSummary,
   getAcademicLevels,
   getTranscript,
+  getFullTranscript,
   getCurrentCourses,
   getRegistrationStatus
 };

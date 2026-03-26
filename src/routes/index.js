@@ -20,6 +20,7 @@ router.get('/notifications/:sessionId', studentController.getNotifications);
 // --- Specialized Dashboard Data (Broken down for ease of use) ---
 router.get('/student/academic-summary/:sessionId', studentController.getAcademicSummary);
 router.get('/student/academic-levels/:sessionId', studentController.getAcademicLevels);
+router.get('/student/transcript/:sessionId', studentController.getFullTranscript);
 router.get('/student/transcript/:level/:sessionId', studentController.getTranscript);
 router.get('/student/current-courses/:sessionId', studentController.getCurrentCourses);
 router.get('/student/registration-status/:sessionId', studentController.getRegistrationStatus);
