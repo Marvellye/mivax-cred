@@ -1,142 +1,116 @@
-# MivaX
+# 🚀 MivaX: The Open Source Miva Student API 🎓
 
-**MivaX** is the open-source backend infrastructure for **Miva Open University** students. It provides a robust, high-performance API that bridges both the **LMS (Moodle)** and the **SIS (Student Information System)** into a single, unified interface.
+[![License: MIT](https://img.shields.io/badge/License-MIT-red.svg)](https://opensource.org/licenses/MIT)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.x-blue.svg)](https://nodejs.org/)
+[![Status: Open Source](https://img.shields.io/badge/Status-Open%20Source-green.svg)](#contributing-is-power-)
+[![Built For: Students](https://img.shields.io/badge/Built%20For-Students-orange.svg)](#)
 
-It uses a **Hybrid Architecture**:
-
-- **Heavy (Playwright):** Used only for authentication to handle complex redirects and session generation.
-- **Light (Axios + Cheerio):** Used for all data-fetching routes to ensure sub-second response times and minimal CPU/Memory overhead.
+**MivaX** is a powerful, student-built backend infrastructure designed for the **Miva Open University** community. It bridges the gap between the **LMS (Moodle)** and the **SIS (Student Information System)**, providing a unified, high-performance API for building the next generation of campus tools.
 
 ---
 
-## 🚀 Getting Started
+## 🏗️ Hybrid Architecture
 
-### Local Setup
+We combine two worlds to give you the best performance:
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/Marvellye/mivax-cred.git
-   cd mivax-cred
-   ```
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
-3. **Install Browser Engine**:
-   ```bash
-   npx playwright install chromium
-   ```
-4. **Start the server**:
-   ```bash
-   node index.js
-   ```
-   _The server will run on `http://localhost:3000`_
+- 🏎️ **Light Layer (Axios + Cheerio):** 95% of data routes. Pure HTTP fetching and lightning-fast HTML parsing.
+- 🤖 **Heavy Layer (Playwright):** Only used for the initial secure login to bypass complex redirects and capture session state.
+
+> **Result:** Sub-second response times for courses, grades, and profiles after the initial login!
+
+---
+
+## 🚦 Quick Start
+
+### 1. ⚙️ Setup Environment
+```bash
+# Clone the vision
+git clone https://github.com/Marvellye/mivax-cred.git
+cd mivax-cred
+
+# Install components
+npm install
+
+# Setup the browser engine
+npx playwright install chromium
+```
+
+### 2. ⚡ Launch Server
+```bash
+node index.js
+```
+_MivaX will be live at `http://localhost:3000`_ 🚀
 
 ---
 
 ## 📬 Testing with Postman
 
-We have provided a fully configured Postman collection to help you get started in seconds.
+We want you to start building **immediately**. We've included a professional Postman collection in the root:
 
-1. Import `MivaX.postman_collection.json` into Postman.
-2. Go to the **Variables** tab in the collection.
-3. Set your `email`, `password`, and `baseUrl` (http://localhost:3000).
-4. Run the **Login** request to get a `sessionId`.
-5. The collection is configured to automatically use that `sessionId` for all other requests.
+1. 📥 Import `MivaX.postman_collection.json` into Postman.
+2. 🔑 Set your `email` and `password` in the **Variables** tab.
+3. 🏃‍♂️ Run the **Login** request.
+4. 🪄 All other routes will automatically use the generated `sessionId`!
 
 ---
 
 ## 🛠️ API Reference
 
-### 1. Authentication
+### 🔐 1. Authentication
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/login` | Securely exchange credentials for a session UUID. |
 
-#### `POST /login`
+### 👨‍🎓 2. Student (SIS) Data
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/user/:sessionId` | Full profile, biography & contact info. |
+| `GET` | `/student/academic-summary/:sessionId` | **CGPA**, Degree Class, and Credits summary. |
+| `GET` | `/student/transcript/:sessionId` | **Full Transcript** (100L - 400L) in one request. |
+| `GET` | `/student/current-courses/:sessionId` | Only currently active semester courses. |
+| `GET` | `/payment-records/:sessionId` | Full financial transaction history. |
+| `GET` | `/notifications/:sessionId` | Real-time university notifications. |
 
-Authenticates with Miva LMS/SIS and returns a `sessionId`.
-
-- **Body**: `{ "email": "...", "password": "..." }`
-- **Returns**: `{ "sessionId": "UUID" }`
-- **Note**: This is the only route that launches a browser (Playwright). It takes ~15-30s.
-
----
-
-### 2. Student (SIS) Data
-
-These routes fetch data directly from the Student Information System backend.
-
-#### `GET /user/:sessionId`
-
-Returns the student's full profile, biography, and contact details.
-
-#### `GET /student/academic-summary/:sessionId`
-
-Returns overall performance stats: **CGPA**, **Degree Class**, and Total Credits.
-
-#### `GET /student/academic-levels/:sessionId`
-
-Lists all academic levels (100L, 200L, etc.) with completion status and dates.
-
-#### `GET /student/transcript/:sessionId`
-
-Returns a **Full Transcript** containing all levels, semesters, and every course result ever recorded.
-
-#### `GET /student/transcript/:level/:sessionId`
-
-Returns a detailed transcript for a **specific level** (e.g., `200_LEVEL`).
-
-#### `GET /student/current-courses/:sessionId`
-
-Returns only the courses the student is **currently** enrolled in for the active semester.
-
-#### `GET /payment-records/:sessionId`
-
-Returns a paginated list of all financial transactions and payment history.
-
-#### `GET /notifications/:sessionId`
-
-Returns student-specific notifications from the university.
-
-#### `GET /dashboard/:sessionId`
-
-Returns the **Raw SIS Dashboard** JSON (very heavy, use specialized routes above for performance).
+### 📚 3. LMS (Course) Data
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/courses/:sessionId` | Dashboard course list with progress. |
+| `GET` | `/course/:id/:sessionId` | Course structure (sections, modules, files). |
+| `GET` | `/mod/:type/:id/:sessionId` | Content details (Video URLs, HTML, Quizzes). |
+| `GET` | `/img/:base64url/:sessionId` | Authenticated proxy for LMS images. |
 
 ---
 
-### 3. LMS (Course) Data
+## 🤝 Contributing is Power! 🌟
 
-These routes interact with the Learning Management System (Moodle).
+**MivaX belongs to you.** We believe student-led innovation is the fastest way to improve our university experience.
 
-#### `GET /courses/:sessionId`
+- 🐛 **Found a bug?** Open an Issue.
+- ✨ **Have an idea for a route?** Fork and PR.
+- 🛠️ **Want to help?** Check our open issues!
 
-Lists all courses currently visible on the LMS dashboard with progress indicators.
-
-#### `GET /course/:id/:sessionId`
-
-Returns the internal structure of a course, including all sections and modules.
-
-#### `GET /mod/:type/:id/:sessionId`
-
-Fetches the content for a specific module (Video URLs, HTML Content, Quiz metadata).
-
-- **Types**: `page`, `quiz`, `assign`, `forum`, `url`.
-
-#### `GET /img/:base64url/:sessionId`
-
-An authenticated proxy to fetch LMS images without CORS issues.
+Whether you're a Software Engineering student or just curious about APIs, your contribution matters. Let's build something amazing for Miva together!
 
 ---
 
-## 🏗️ Architecture
+## 📁 Repository Structure
 
-| Layer          | Component          | Role                                                 |
-| :------------- | :----------------- | :--------------------------------------------------- |
-| **Route**      | `src/routes/`      | Express route definitions                            |
-| **Controller** | `src/controllers/` | Request handling & response formatting               |
-| **Service**    | `src/services/`    | Business logic (Scraping, Parsing, Token Management) |
-| **Storage**    | `sessions/`        | Local JSON files storing encrypted session state     |
+| Layer | Component | Role |
+| :--- | :--- | :--- |
+| 🛣️ **Route** | `src/routes/` | Express route definitions |
+| 🎮 **Controller** | `src/controllers/` | Request logic & formatters |
+| ⚙️ **Service** | `src/services/` | Scraping, Parsing & Session Magic |
+| 📂 **Storage** | `sessions/` | Encrypted local session persistence |
 
 ---
 
-## 📜 License
+## ⚠️ Disclaimer
 
-Released under the **MIT License**. Built with ❤️ for the Miva Student Developer Community.
+**MivaX is for educational purposes only.** It is intended as a tool for student developers to learn about API architecture, web scraping, and modular backend design. Please use this tool responsibly and in accordance with Miva Open University's policies regarding data access and privacy.
+
+---
+
+## 📜 License & Ethics
+
+Released under the **MIT License**.
+_Built with ❤️ for the Miva Student Developer Community. For students, by students._
