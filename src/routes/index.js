@@ -11,6 +11,7 @@ router.get('/', (req, res) => {
 
 router.post('/login', authController.login);
 router.get('/user/:sessionId', studentController.getMe);
+router.get('/dashboard/:sessionId', studentController.getDashboard);
 router.get('/payment-records/:sessionId', studentController.getPaymentRecords);
 router.get('/notifications/:sessionId', studentController.getNotifications);
 router.get('/courses/:sessionId', coursesController.getCourses);

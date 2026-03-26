@@ -47,6 +47,7 @@ const getPaymentRecords = async (req, res) => {
     res.status(error.response?.status || 500).json(error.response?.data || { error: error.message });
   }
 };
+
 const getNotifications = async (req, res) => {
   const { sessionId } = req.params;
   const { page = 1, perPage = 5 } = req.query;
@@ -70,8 +71,31 @@ const getNotifications = async (req, res) => {
   }
 };
 
+const getDashboard = async (req, res) => {
+  const { sessionId } = req.params;
+  const sisAuth = getSISAuthHeaders(sessionId);
+  
+  if (!sisAuth) {
+    return res.status(401).json({ error: 'SIS session not found or token missing' });
+  }
+
+  try {
+    const response = await axios.get(`${SIS_BASE_URL}/student/dashboard`, {
+      headers: sisAuth.headers
+    });
+    
+    res.json(response.data);
+  } catch (error) {
+    if (error.response?.status === 401) {
+      return handleRouteError(new SessionExpiredError(), sessionId, res);
+    }
+    res.status(error.response?.status || 500).json(error.response?.data || { error: error.message });
+  }
+};
+
 module.exports = {
   getMe,
   getPaymentRecords,
-  getNotifications
+  getNotifications,
+  getDashboard
 };
