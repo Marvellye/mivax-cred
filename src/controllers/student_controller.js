@@ -14,7 +14,14 @@ const _getRawDashboardData = async (sessionId) => {
     const response = await axios.get(`${SIS_BASE_URL}/student/dashboard`, {
       headers: sisAuth.headers
     });
-    return response.data;
+    
+    const root = response.data;
+    // The SIS API often wraps the response in { status, message, data }
+    // We want to return the inner 'data' for processing in specialized routes
+    if (root && root.status === 'OK' && root.data) {
+      return root.data;
+    }
+    return root;
   } catch (error) {
     if (error.response?.status === 401) {
       throw new SessionExpiredError();
@@ -71,8 +78,12 @@ const getPaymentRecords = async (req, res) => {
 const getDashboard = async (req, res) => {
   const { sessionId } = req.params;
   try {
-    const data = await _getRawDashboardData(sessionId);
-    res.json(data);
+    // For the full dashboard, we return exactly what SIS returns (including wrapper)
+    const sisAuth = getSISAuthHeaders(sessionId);
+    const response = await axios.get(`${SIS_BASE_URL}/student/dashboard`, {
+      headers: sisAuth.headers
+    });
+    res.json(response.data);
   } catch (err) {
     handleRouteError(err, sessionId, res);
   }
@@ -144,11 +155,11 @@ const getTranscript = async (req, res) => {
     const transcript = {
       level: levelData.level,
       total_grade_point: levelData.total_grade_point,
-      semesters: levelData.semesters.map(s => ({
+      semesters: (levelData.semesters || []).map(s => ({
         name: s.semester_name,
         type: s.semester_type,
         gpa: s.gpa,
-        courses: s.courses.map(c => ({
+        courses: (s.courses || []).map(c => ({
           code: c.course_code,
           name: c.course_name,
           unit: c.credit_unit,
@@ -176,7 +187,7 @@ const getCurrentCourses = async (req, res) => {
       const currentSemester = currentLevel.semesters?.[0];
       if (!currentSemester) return res.json({ courses: [] });
   
-      const enrolledCourses = currentSemester.courses.filter(c => c.status === 'ENROLLED');
+      const enrolledCourses = (currentSemester.courses || []).filter(c => c.status === 'ENROLLED');
       res.json({ 
           level: currentLevel.level,
           semester: currentSemester.semester_name,
