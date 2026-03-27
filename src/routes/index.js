@@ -6,7 +6,7 @@ const imgController = require('../controllers/img_controller');
 const studentController = require('../controllers/student_controller');
 
 router.get('/', (req, res) => {
-  res.send('Miva LMS Scraper API is running!');
+  res.send('MivaX API is running!');
 });
 
 router.post('/login', authController.login);
