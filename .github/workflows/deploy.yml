@@ -43,7 +43,7 @@ jobs:
             npm ci || npm install
 
             echo "Installing Playwright browsers..."
-            npx playwright install --with-deps chromium
+            npx playwright install chromium
 
             echo "Restarting app with PM2..."
             # Use index.js as the entry point
