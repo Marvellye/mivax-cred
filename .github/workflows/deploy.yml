@@ -21,19 +21,30 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
           script: |
-            cd ~/mivax
-            if [ ! -d "mivax-cred/.git" ]; then
-              echo "Repository not found, cloning..."
-              git clone git@github.com:Marvellye/mivax-cred.git mivax-cred
+            # Set up error handling
+            set -e
+
+            # Use ~/mivax-cred as the base directory
+            mkdir -p ~/mivax-cred
+            cd ~/mivax-cred
+
+            # Clone the repository if it doesn't exist in the current directory
+            if [ ! -d ".git" ]; then
+              echo "Repository not found, cloning into current directory..."
+              git clone git@github.com:Marvellye/mivax-cred.git .
             fi
 
-            cd mivax-cred
             echo "Updating repository..."
             git fetch origin
             git reset --hard origin/${{ github.ref_name }}
 
             echo "Installing dependencies..."
-            npm install
+            # Use npm ci for clean production install if package-lock.json exists, otherwise npm install
+            npm ci || npm install
+
+            echo "Installing Playwright browsers..."
+            npx playwright install chromium
 
             echo "Restarting app with PM2..."
-            pm2 restart mivax-cred || pm2 start app.js --name mivax-cred
+            # Use index.js as the entry point
+            pm2 restart mivax-cred || pm2 start index.js --name mivax-cred
