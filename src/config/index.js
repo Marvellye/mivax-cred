@@ -5,4 +5,5 @@ module.exports = {
   BASE_URL: process.env.BASE_URL || 'https://mivax.marvelly.com.ng/', // fallback for current logic
   SIS_BASE_URL: 'https://sis-be.miva.university',
   SESSIONS_DIR: path.join(__dirname, '../../sessions'),
+  ANALYTICS_DIR: path.join(__dirname, '../../analytics_logs'),
 };

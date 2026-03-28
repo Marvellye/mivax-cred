@@ -2,3 +2,4 @@ node_modules/
 sessions/
 apidata/
 .env
+analytics_logs/

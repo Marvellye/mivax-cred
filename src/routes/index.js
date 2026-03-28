@@ -4,10 +4,13 @@ const authController = require('../controllers/auth_controller');
 const coursesController = require('../controllers/courses_controller');
 const imgController = require('../controllers/img_controller');
 const studentController = require('../controllers/student_controller');
+const analyticsController = require('../controllers/analytics_controller');
 
 router.get('/', (req, res) => {
   res.send('MivaX API is running!');
 });
+
+router.get('/traffic-summary', analyticsController.getSummary);
 
 router.post('/login', authController.login);
 
