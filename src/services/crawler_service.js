@@ -49,46 +49,64 @@ async function login(username, password) {
     // Speedup: Block all heavy static resources
     await page.route('**/*', route => {
       const type = route.request().resourceType();
-      if (['image', 'media', 'font', 'stylesheet'].includes(type)) {
+      if (['image', 'media', 'font', 'stylesheet'].includes(type) && !route.request().url().includes('miva')) {
         route.abort();
       } else {
         route.continue();
       }
     });
 
-    // 2. Inject state into SIS frontend SUPER FAST, avoiding waiting for full network
+    // 2. Inject state into SIS frontend
     await page.goto('https://sis.miva.university', { waitUntil: 'commit' });
-    await page.evaluate((tokenData) => {
-      localStorage.setItem('auth-storage', JSON.stringify({
-        state: { access_token: tokenData.access_token, refresh_token: tokenData.refresh_token, user: null, isAuthenticated: true },
-        version: 0
-      }));
-    }, data.data);
+    
+    const fullAuthStorage = JSON.stringify({
+      state: {
+        access_token: data.data.access_token,
+        refresh_token: data.data.refresh_token,
+        user: null, 
+        isAuthenticated: true,
+        isHydrated: true
+      },
+      version: 0
+    });
 
-    // 3. Navigate directly to CAS auth callback and intercept the cookie instantly!
+    await page.evaluate((val) => {
+      localStorage.setItem('auth-storage', val);
+    }, fullAuthStorage);
+
+    // 3. Navigate directly to CAS and wait for the landing!
     const sessionId = crypto.randomUUID();
     const sessionPath = path.join(SESSIONS_DIR, `${sessionId}.json`);
     
-    // We navigate and parallelize cookie checking
-    page.goto('https://lms.miva.university/login/index.php?authCASattras=CASattras').catch(() => {});
-
-    // Poll for the MoodleSession cookie instead of waiting for the heavy page to hydrate
-    for (let i = 0; i < 50; i++) {
+    await page.goto('https://lms.miva.university/login/index.php?authCASattras=CASattras');
+    
+    try {
+        // Wait for the URL to change to the Moodle dashboard
+        await page.waitForURL(url => url.pathname.includes('/my/'), { timeout: 10000 });
+    } catch (e) {
         const cookies = await context.cookies();
-        if (cookies.some(c => c.name === 'MoodleSession' && c.domain.includes('miva.university'))) {
-            break; // Stop waiting as soon as we got the authentication cookie!
+        if (!cookies.some(c => c.name === 'MoodleSession')) {
+            throw new Error('Timeout waiting for Moodle session landing');
         }
-        await page.waitForTimeout(200);
     }
     
-    // Grab the final state instantly
+    await page.waitForTimeout(1000);
+
+    // Grab the final state naturally
     const storageState = await context.storageState();
     
-    // Emulate existing app requirements
-    storageState.origins = [{
-      origin: 'https://sis.miva.university',
-      localStorage: [{ name: 'auth-storage', value: JSON.stringify({ state: { access_token: data.data.access_token } }) }]
-    }];
+    // Ensure SIS localStorage is fully reconstructed
+    const sisOrigin = storageState.origins.find(o => o.origin === 'https://sis.miva.university');
+    if (sisOrigin) {
+        const authItem = sisOrigin.localStorage.find(item => item.name === 'auth-storage');
+        if (authItem) authItem.value = fullAuthStorage;
+        else sisOrigin.localStorage.push({ name: 'auth-storage', value: fullAuthStorage });
+    } else {
+        storageState.origins.push({
+            origin: 'https://sis.miva.university',
+            localStorage: [{ name: 'auth-storage', value: fullAuthStorage }]
+        });
+    }
 
     fs.writeFileSync(sessionPath, JSON.stringify(storageState));
     
