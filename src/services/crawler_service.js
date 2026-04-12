@@ -29,34 +29,69 @@ async function login(username, password) {
   const page = await context.newPage();
 
   try {
+    // 1. Fetch JWT tokens FAST via API
+    const response = await fetch('https://sis-be.miva.university/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/plain, */*',
+        'Origin': 'https://sis.miva.university',
+        'Referer': 'https://sis.miva.university/',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0',
+        'x-origin-portal': 'student'
+      },
+      body: JSON.stringify({ email: username, password: password })
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(`Login failed: ${response.status}`);
+
+    // Speedup: Block all heavy static resources
     await page.route('**/*', route => {
       const type = route.request().resourceType();
-      if (['image', 'font', 'stylesheet', 'media'].includes(type) && !route.request().url().includes('miva')) {
+      if (['image', 'media', 'font', 'stylesheet'].includes(type)) {
         route.abort();
       } else {
         route.continue();
       }
     });
 
-    await page.goto('https://lms.miva.university', { waitUntil: 'domcontentloaded' });
+    // 2. Inject state into SIS frontend SUPER FAST, avoiding waiting for full network
+    await page.goto('https://sis.miva.university', { waitUntil: 'commit' });
+    await page.evaluate((tokenData) => {
+      localStorage.setItem('auth-storage', JSON.stringify({
+        state: { access_token: tokenData.access_token, refresh_token: tokenData.refresh_token, user: null, isAuthenticated: true },
+        version: 0
+      }));
+    }, data.data);
 
-    if (!page.url().includes('/my/')) {
-      await page.waitForSelector('input[name="email"]', { timeout: 10000 });
-      await page.fill('input[name="email"]', username);
-      await page.fill('input[name="password"]', password);
-      await page.click('button:has-text("Login")');
-
-      await Promise.race([
-        page.waitForSelector('div#page-content, .courseindex-link', { timeout: 45000 }),
-        page.waitForSelector('text=Incorrect email or password', { timeout: 15000 }).then(() => {
-          throw new Error('Incorrect email or password');
-        })
-      ]);
-    }
-
+    // 3. Navigate directly to CAS auth callback and intercept the cookie instantly!
     const sessionId = crypto.randomUUID();
     const sessionPath = path.join(SESSIONS_DIR, `${sessionId}.json`);
-    await context.storageState({ path: sessionPath });
+    
+    // We navigate and parallelize cookie checking
+    page.goto('https://lms.miva.university/login/index.php?authCASattras=CASattras').catch(() => {});
+
+    // Poll for the MoodleSession cookie instead of waiting for the heavy page to hydrate
+    for (let i = 0; i < 50; i++) {
+        const cookies = await context.cookies();
+        if (cookies.some(c => c.name === 'MoodleSession' && c.domain.includes('miva.university'))) {
+            break; // Stop waiting as soon as we got the authentication cookie!
+        }
+        await page.waitForTimeout(200);
+    }
+    
+    // Grab the final state instantly
+    const storageState = await context.storageState();
+    
+    // Emulate existing app requirements
+    storageState.origins = [{
+      origin: 'https://sis.miva.university',
+      localStorage: [{ name: 'auth-storage', value: JSON.stringify({ state: { access_token: data.data.access_token } }) }]
+    }];
+
+    fs.writeFileSync(sessionPath, JSON.stringify(storageState));
+    
     return sessionId;
   } finally {
     await context.close();
