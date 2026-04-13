@@ -12,14 +12,17 @@ The MivaX API is a unified interface for interacting with a university's Student
 
 **Base URL:** `https://mivax.marvelly.com.ng`
 
-## 2. Authentication Mechanism (CRITICAL INSTRUCTION)
+## 2. Authentication Mechanism & State Management (CRITICAL INSTRUCTION)
 
-Unlike standard APIs that use `Authorization: Bearer <token>` headers, the MivaX API uses **Path-Based Session Authentication**.
+Unlike standard APIs that use `Authorization: Bearer <token>` headers, the MivaX API uses **Path-Based Session Authentication**. The `sessionId` is highly persistent and should be reused across multiple requests.
 
-1. The agent MUST first call `POST /login` with the user's `email` and `password`.
-2. The response will yield a `sessionId`.
-3. This `sessionId` MUST be appended as a **path parameter** to the end of almost every subsequent API request (e.g., `/user/{sessionId}`).
-4. If a request fails with an unauthorized or session expired error, the agent must re-run the `POST /login` flow.
+**State Management & Login Flow:**
+
+1. **Check Memory:** Before asking the user, check your memory/tool state for an existing `sessionId` or saved `email` and `password`.
+2. **Login:** If no active `sessionId` exists, call `POST /login` using the user's credentials. (Prompt the user for them only if they are not stored in memory).
+3. **Persist State:** Once a successful response yields a `sessionId`, you MUST save the `sessionId` AND the user's `email`/`password` in your memory/context for future use.
+4. **Usage:** Append the `sessionId` as a **path parameter** to the end of almost every subsequent API request (e.g., `/user/{sessionId}`).
+5. **Silent Re-Authentication:** If a request fails with an unauthorized or session expired error, do not immediately ask the user. Instead, use the saved `email` and `password` to silently re-run the `POST /login` flow, update the `sessionId` in memory, and retry the failed request.
 
 ---
 
@@ -126,7 +129,7 @@ _Requires `{sessionId}` in the path. Drill down from Courses -> Course Content -
 
 When formatting requests, the agent should recognize these variable types:
 
-- `sessionId` (String): The active session token retrieved from `/login`. MUST be placed at the end of the URL path.
+- `sessionId` (String): The active session token retrieved from memory or `/login`. MUST be placed at the end of the URL path.
 - `courseId` (String/Integer): Unique identifier for an LMS course (e.g., `"388"`). Retrieved from the `/courses` endpoint.
 - `modType` (String): The type of LMS module (e.g., `page`, `quiz`, `url`, `forum`, `assignment`, `feedback`). Retrieved from the `/course/{courseId}` endpoint.
 - `modId` (String/Integer): Unique identifier for a specific module within a course (e.g., `"16428"`). Retrieved from the `/course/{courseId}` endpoint.
@@ -140,15 +143,14 @@ When formatting requests, the agent should recognize these variable types:
 
 **Workflow 1: Fetching Student Grades / Transcript**
 
-1. Ask user for `email` and `password` (if not in context).
-2. Execute `POST /login` to obtain `sessionId`.
-3. Execute `GET /student/transcript/{sessionId}` to get all grades.
-4. _Alternative:_ Execute `GET /student/transcript/{level}/{sessionId}` to isolate a specific year's performance.
-5. Summarize the GPA, Distinction/Passed courses, and overall units for the user.
+1. Check memory for an active `sessionId`. If none, check for saved credentials and call `POST /login`. Only prompt the user if credentials are unknown.
+2. Execute `GET /student/transcript/{sessionId}` to get all grades.
+3. _Alternative:_ Execute `GET /student/transcript/{level}/{sessionId}` to isolate a specific year's performance.
+4. Summarize the GPA, Distinction/Passed courses, and overall units for the user.
 
 **Workflow 2: Studying / Reading Course Materials**
 
-1. Ensure `sessionId` is available.
+1. Check memory for an active `sessionId` (or silently re-authenticate).
 2. Execute `GET /courses/{sessionId}`. Find the target course and extract its `id` (`courseId`).
 3. Execute `GET /course/{courseId}/{sessionId}`. Look through the `sections` -> `modules` array. Identify the target material and extract its `id` (`modId`) and `type` (`modType`).
 4. Execute `GET /mod/{modType}/{modId}/{sessionId}` to read the module content.
@@ -156,14 +158,14 @@ When formatting requests, the agent should recognize these variable types:
 
 **Workflow 3: Checking Financial/Payment Status**
 
-1. Ensure `sessionId` is available.
+1. Check memory for an active `sessionId` (or silently re-authenticate).
 2. Execute `GET /payment-records/{sessionId}?page=1&perPage=10`.
 3. Parse `response.data.paid` to summarize recent successful payments (Amount, Currency, Date, Installment Name).
 4. Parse `response.data.owed_records` to inform the user of any outstanding balances.
 
 **Workflow 4: Fetching Academic Standing**
 
-1. Ensure `sessionId` is available.
+1. Check memory for an active `sessionId` (or silently re-authenticate).
 2. Execute `GET /student/academic-summary/{sessionId}`.
 3. Present the user's `overall_cgpa`, `total_grade_points`, and `degree` classification (e.g., "First class").
 
@@ -171,6 +173,7 @@ When formatting requests, the agent should recognize these variable types:
 
 ## 6. Constraints & Best Practices for AI
 
+- **Session & Credential Persistence:** The `sessionId` is highly persistent. ALWAYS save both the `sessionId` and the user's `email`/`password` in your memory or context state. Reuse the stored `sessionId` for all subsequent requests. If a request fails due to session expiration, use the stored credentials to silently re-authenticate via `POST /login` and update the saved `sessionId`.
 - **Path Construction:** NEVER pass the `sessionId` in a header or query parameter. It ALWAYS goes at the end of the URL path.
 - **Pagination:** For `/payment-records` and `/notifications`, ALWAYS apply `?page=1&perPage=10` default query parameters to avoid massive payloads, unless the user specifically asks for more history.
 - **HTML Parsing:** The LMS endpoints (`/courses` summary, `/mod` contentHtml) return raw HTML. You must strip or convert the HTML into clean Markdown before displaying it to the user.
