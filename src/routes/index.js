@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/auth_controller');
 const coursesController = require('../controllers/courses_controller');
+const vimeoController = require('../controllers/vimeo_controller');
 const imgController = require('../controllers/img_controller');
 const studentController = require('../controllers/student_controller');
 const analyticsController = require('../controllers/analytics_controller');
@@ -33,5 +34,9 @@ router.get('/courses/:sessionId', coursesController.getCourses);
 router.get('/course/:id/:sessionId', coursesController.getCourseDetails);
 router.get('/mod/:type/:id/:sessionId', coursesController.getModuleDetails);
 router.get('/img/:base64url/:sessionId', imgController.proxyImg);
+
+// --- Vimeo metadata / transcript (module pages sometimes embed Vimeo videos) ---
+router.get('/vimeo/:videoId/meta', vimeoController.getMeta);
+router.get('/vimeo/:videoId/transcript', vimeoController.getTranscript);
 
 module.exports = router;

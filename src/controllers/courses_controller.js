@@ -1,6 +1,7 @@
 const axios = require('axios');
 const crawlerService = require('../services/crawler_service');
 const parserService = require('../services/parser_service');
+const vimeoService = require('../services/vimeo_service');
 const { getAuthHeaders, SessionExpiredError } = require('../services/session_service');
 const { handleRouteError } = require('../middleware/error_handler');
 
@@ -49,6 +50,25 @@ const getModuleDetails = async (req, res) => {
     }
 
     const modData = parserService.parseModuleDetails(response.data, req.params.type);
+
+    // Enrich with Vimeo metadata when the module embeds a Vimeo video.
+    // Best-effort: failures are swallowed so the module response still works.
+    try {
+      if (vimeoService.hasVimeoEmbed(modData, response.data)) {
+        const ids = vimeoService.extractVimeoIds({
+          iframes: modData.iframes,
+          contentHtml: modData.contentHtml,
+          html: response.data
+        });
+        const videos = [];
+        for (const id of ids.slice(0, 3)) {
+          try { videos.push(await vimeoService.getVimeoMeta(id)); }
+          catch { /* skip unreachable video */ }
+        }
+        if (videos.length) modData.vimeo = videos;
+      }
+    } catch { /* vimeo enrichment is non-fatal */ }
+
     res.json({ id: req.params.id, ...modData });
   } catch (err) {
     handleRouteError(err, sessionId, res);
