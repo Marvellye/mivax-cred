@@ -123,6 +123,25 @@ _Requires `{sessionId}` in the path. Drill down from Courses -> Course Content -
 - **Endpoint:** `GET /img/{encodedUrl}/{sessionId}`
 - **Description:** Proxies LMS images. The source image URL must be base64 encoded.
 
+#### 5. Vimeo Video Metadata
+
+- **Endpoint:** `GET /vimeo/{videoId}/meta`
+- **Description:** Extracts metadata for a Vimeo video (no `sessionId` required — public, unauthenticated).
+- **Response Mapping:** Returns `id`, `title`, `duration` (seconds), `width`, `height`, `thumbnail`, `owner`, `embed`, `hls` (master playlist URL), `dash` (MPEG-DASH URL), `hasCaptions`, and `captions` (array of `{ id, lang, label, url, isDefault, aiGenerated }`).
+
+#### 6. Vimeo Transcript / Captions
+
+- **Endpoint:** `GET /vimeo/{videoId}/transcript`
+- **Description:** Fetches the auto-generated caption track and parses the WebVTT into plain text. No `sessionId` required.
+- **Response Mapping:** Returns `{ found, language, label, aiGenerated, cueCount, cues, full }`.
+  - `found` (boolean): `false` if Vimeo is not serving captions for this video (occasionally context-gated).
+  - `cues` (array): each `{ t: "00:00:10.115", text: "..." }` — timestamped lines.
+  - `full` (string): the complete transcript concatenated into one string (use this for summaries/quizzes).
+
+#### 7. Auto-Enrichment on Module Detail
+
+- When `GET /mod/{modType}/{modId}/{sessionId}` detects a Vimeo iframe in the module, it automatically attaches a `vimeo` array to the response, each item carrying the same shape as `GET /vimeo/{videoId}/meta`. The agent can read `vimeo[].captions[].url` or call `GET /vimeo/{videoId}/transcript` for the full text.
+
 ---
 
 ## 4. Required Variables & Data Types
@@ -136,6 +155,7 @@ When formatting requests, the agent should recognize these variable types:
 - `level` (String): Academic level formatting required by the API (e.g., `100_LEVEL`, `200_LEVEL`, `300_LEVEL`).
 - `page` / `perPage` (Integer): Used in query strings for pagination (e.g., `?page=1&perPage=5`).
 - `encodedUrl` (String): A Base64 encoded string of an image URL.
+- `videoId` (String/Integer): The Vimeo video ID (e.g., `1145740240`), extracted from a Vimeo iframe `src` (`player.vimeo.com/video/{videoId}`) or the `vimeo` block on a module response. No `sessionId` required for `/vimeo/...` routes.
 
 ---
 
@@ -168,6 +188,17 @@ When formatting requests, the agent should recognize these variable types:
 1. Check memory for an active `sessionId` (or silently re-authenticate).
 2. Execute `GET /student/academic-summary/{sessionId}`.
 3. Present the user's `overall_cgpa`, `total_grade_points`, and `degree` classification (e.g., "First class").
+
+---
+
+**Workflow 5: Extracting a Lecture Transcript from a Vimeo-Embedded Module**
+
+1. Check memory for an active `sessionId` (or silently re-authenticate).
+2. Drill to the module: `GET /courses/{sessionId}` → `GET /course/{courseId}/{sessionId}` → `GET /mod/{modType}/{modId}/{sessionId}`.
+3. If the module response contains a `vimeo` array, extract the `id` (`videoId`) from it. Otherwise, parse any Vimeo iframe `src` in `contentHtml` for `player.vimeo.com/video/{videoId}`.
+4. Execute `GET /vimeo/{videoId}/transcript` to get `{ found, cueCount, cues, full }`.
+5. If `found` is `false`, inform the user captions aren't currently available from Vimeo (transient) and offer `GET /vimeo/{videoId}/meta` for the thumbnail/stream URLs instead.
+6. Use `full` (the concatenated transcript) to summarize the lecture, generate study notes, or build quiz questions. Use `cues` when timestamped references are needed.
 
 ---
 

@@ -79,6 +79,32 @@ We want you to start building **immediately**. We've included a professional Pos
 | `GET` | `/mod/:type/:id/:sessionId` | Content details (Video URLs, HTML, Quizzes). |
 | `GET` | `/img/:base64url/:sessionId` | Authenticated proxy for LMS images. |
 
+### 🎬 4. Vimeo Media (Transcript & Metadata)
+Course modules often embed Vimeo videos. These public, unauthenticated endpoints extract
+thumbnail, stream manifests, and **auto-generated captions/transcript** — no `sessionId` required.
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/vimeo/:videoId/meta` | Title, duration, thumbnail, HLS + DASH URLs, captions[]. |
+| `GET` | `/vimeo/:videoId/transcript` | Parsed WebVTT → `{ cues:[{t,text}], full, language }`. |
+
+> **Note:** Vimeo signs its CDN/caption URLs and rotates them (~1h expiry). Use them
+> immediately; the API returns them as-is and does **not** persist them.
+
+The `vimeo` block is also auto-attached to module responses when a LMS module embeds a
+Vimeo iframe:
+```json
+{
+  "id": "16428",
+  "title": "Lecture 2",
+  "vimeo": [
+    { "id": "1145740240", "title": "SEN 410_Y4_02_02", "duration": 483,
+      "thumbnail": "https://i.vimeocdn.com/...", "hls": "https://vod-adaptive-ak.../playlist.m3u8",
+      "hasCaptions": true, "captions": [{ "lang": "en-x-autogen", "url": "https://captions.vimeo.com/..." }] }
+  ]
+}
+```
+
 ---
 
 ## 🤝 Contributing is Power! 🌟
